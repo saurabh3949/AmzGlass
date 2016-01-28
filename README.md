@@ -15,7 +15,7 @@ Parse Amazon product pages using Python to get the following attributes:
     cd AmzGlass
     pip install -r requirements.txt
 
-Now copy all the product HTML to data folder and run:
+Now copy all the product HTMLs to data folder and run:
 
     scrapy crawl amazon -o output.json
 
