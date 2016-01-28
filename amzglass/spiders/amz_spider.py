@@ -6,6 +6,24 @@ from bs4 import Tag
 import os
 from itertools import chain
 
+categories_pattern = re.compile(' in \w+')
+reviews_pattern = re.compile(' in \w+')
+
+def clean_string(val):
+    string = val.replace(u'\xa0', u' ')
+    string = re.sub("\s+", " ", string)
+    string = string.strip()
+    return string
+
+def get_categories(val):
+    string = clean_string(val)
+    cat_list = re.findall(categories_pattern, val)
+    if cat_list:
+        categories = [cat.replace(" in ","") for cat in cat_list]
+        return list(set(categories))
+    else:
+        return []
+
 def absolute_file_paths(directory, num = float("inf")):
     i = 0
     ret = []
@@ -16,12 +34,13 @@ def absolute_file_paths(directory, num = float("inf")):
                 ret.append("file://" + os.path.abspath(os.path.join(dirpath, f)))
                 if i >= num:
                     return ret
+    return ret
 
 class AmzSpider(scrapy.Spider):
     name = "amazon"
     directory = "../other/"
     num = 10
-    start_urls = absolute_file_paths(directory, num)
+    start_urls = absolute_file_paths(directory)
 
     def parse(self, response):
         soup = BeautifulSoup(response.body)
@@ -34,8 +53,10 @@ class AmzSpider(scrapy.Spider):
         item['brand'] = get_brand(soup)
         item['feature_bullets'] = get_bullets(soup)
         item['description'] = get_desc(soup)
-        item['details'] = get_details(soup)
-        item['tech_specs'] = get_tech_specs(soup)
+        item['details'], item['category'] = get_details(soup)
+        item['tech_specs'],cat = get_tech_specs(soup)
+        if not item['category']:
+            item['category'] = cat
 
         yield item
 
@@ -84,7 +105,7 @@ def get_brand(soup):
         key, val = row
         tag = soup.find(**{key:val})
         if tag:
-            brand = tag.text
+            brand = tag.text.strip()
             break
     return brand
 
@@ -93,9 +114,9 @@ def get_bullets(soup):
     feature_bullets_css = [
         ("id","feature-bullets"),
         ("id","feature-bullets-btf"),
-        ("id", "bookDescription_feature_div"),
-        ("class_","productDescriptionWrapper"),
-        ("id","productDescription")
+        # ("id", "bookDescription_feature_div"),
+        # ("class_","productDescriptionWrapper"),
+        # ("id","productDescription")
     ]
 
     for row in feature_bullets_css:
@@ -103,6 +124,8 @@ def get_bullets(soup):
         tag = soup.find(**{key:val})
         if tag:
             feature_bullets = tag.text.strip()
+            feature_bullets = re.sub("See more product details", "", feature_bullets)
+            feature_bullets = feature_bullets.strip()
             break
     return feature_bullets
 
@@ -127,6 +150,7 @@ def get_desc(soup):
     return description
 
 def get_details(soup):
+    categories = []
     all_details = {}
     details = Tag(name="table")
     details_css = [
@@ -153,54 +177,45 @@ def get_details(soup):
         # if attr == "Shipping Weight":
         #     break
         if attr == "Average Customer Review":
-            val = t.find("a").text
+            attr = "Reviews"
             try:
-                val = re.search(r'\d.\d', val).group().strip()
+                val = re.search(r'\d customer review', val).group().strip()
+                val = val.replace(" customer review", "")
             except:
+                val = ""
                 pass
         if attr == "Amazon Best Sellers Rank":
+            cat_list = re.findall(categories_pattern, val)
+            if cat_list:
+                categories = [cat.replace(" in ","") for cat in cat_list]
+            val = clean_string(val)
             a = re.search(r'#.+?\d ', val)
             a = a.group().replace(" ","").replace("#","").replace(",","")
             val = a
         all_details[attr] = val
-    return all_details
+    return all_details, categories
 
 def get_tech_specs(soup):
     all_specs = {}
-    details = Tag(name="table")
-    details_css = [
-        ("id", "productDetailsTable"),
-        ("id","detail-bullets"),
-        ("id","detailBullets")
-    ]
+    categories = []
+    div = soup.find(id="prodDetails")
+    if div:
+        tables = div.findAll("table")
+        if tables:
+            for table in tables:
+                rows = table.findAll("tr")
+                for row in rows:
+                    cell_info = []
+                    for cell in row.findAll("td"):
+                        cell_info.append(cell.text.strip())
+                    if len(cell_info) == 2 and len(cell_info[0]) > 0:
+                        if "Best Sellers Rank" in cell_info[0]:
+                            val = clean_string(cell_info[1])
+                            categories = get_categories(cell_info[1])
+                            a = re.search(r'#.+?\d ', val)
+                            a = a.group().replace(" ","").replace("#","").replace(",","")
+                            cell_info[1] = a
+                            all_specs[cell_info[0]] = cell_info[1]
 
-    for row in details_css:
-        key, val = row
-        tag = soup.find(**{key:val})
-        if tag:
-            details = tag
-            break
-
-    for t in details.findAll("li"):
-        text = t.text.strip()
-        colon_pos = text.find(":")
-        attr = text[:colon_pos].strip()
-        val = text[colon_pos+1:].strip()
-        if t.find("a"):
-            remove_text = t.find("a").text
-            val = val.replace(remove_text,"").replace("()","").strip()
-        # if attr == "Shipping Weight":
-        #     break
-        if attr == "Average Customer Review":
-            val = t.find("a").text
-            try:
-                val = re.search(r'\d.\d', val).group().strip()
-            except:
-                pass
-        if attr == "Amazon Best Sellers Rank":
-            a = re.search(r'#.+?\d ', val)
-            a = a.group().replace(" ","").replace("#","").replace(",","")
-            val = a
-        all_specs[attr] = val
-    return all_specs
+    return all_specs, categories
 

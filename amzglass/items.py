@@ -10,6 +10,7 @@ import scrapy
 
 class AmzProduct(scrapy.Item):
     html_file = scrapy.Field()
+    category = scrapy.Field()
     title = scrapy.Field()
     price = scrapy.Field()
     brand = scrapy.Field()
