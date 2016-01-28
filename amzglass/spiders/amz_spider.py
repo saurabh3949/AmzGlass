@@ -38,7 +38,7 @@ def absolute_file_paths(directory, num = float("inf")):
 
 class AmzSpider(scrapy.Spider):
     name = "amazon"
-    directory = "../other/"
+    directory = "./data/"
     num = 10
     start_urls = absolute_file_paths(directory)
 
