@@ -18,4 +18,5 @@ class AmzProduct(scrapy.Item):
     description = scrapy.Field()
     details = scrapy.Field()
     tech_specs = scrapy.Field()
+    images = scrapy.Field()
 

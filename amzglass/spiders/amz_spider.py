@@ -24,6 +24,14 @@ def get_categories(val):
     else:
         return []
 
+def clean_image_url(url):
+    parts = url.split("_")
+    if len(parts) > 1:
+        out = parts[0] + parts[-1][1:]
+    else:
+        out = url
+    return out
+
 def absolute_file_paths(directory, num = float("inf")):
     i = 0
     ret = []
@@ -51,6 +59,7 @@ class AmzSpider(scrapy.Spider):
         item['title'] = get_title(soup)
         item['price'] = get_price(soup)
         item['brand'] = get_brand(soup)
+        item['images'] = get_images(soup)
         item['feature_bullets'] = get_bullets(soup)
         item['description'] = get_desc(soup)
         item['details'], item['category'] = get_details(soup)
@@ -95,6 +104,20 @@ def get_price(soup):
             break
     return price
 
+def get_images(soup):
+    images = []
+    images_css = [
+        ("id", "altImages"),
+    ]
+
+    for row in images_css:
+        key, val = row
+        tag = soup.find(**{key:val})
+        if tag and tag.findAll("img"):
+            for img in tag.findAll("img"):
+                url = img['src']
+                images.append(clean_image_url(url))
+    return images
 
 def get_brand(soup):
     brand = ""
